@@ -1,0 +1,114 @@
+name: Release
+
+# Trigger: push a tag like  git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write   # needed to create the GitHub Release
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Windows x64 
+          - platform: windows-latest
+            args: ""
+            rust_target: ""
+            label: Windows x64
+
+          # ── macOS Apple Silicon (arm64) 
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            rust_target: aarch64-apple-darwin
+            label: macOS Apple Silicon
+
+          # ── macOS Intel (x86_64) 
+          - platform: macos-13
+            args: "--target x86_64-apple-darwin"
+            rust_target: x86_64-apple-darwin
+            label: macOS Intel
+
+    runs-on: ${{ matrix.platform }}
+    name: Build · ${{ matrix.label }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── JavaScript toolchain 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # ── Rust toolchain 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ── Frontend deps 
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Build + publish release 
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # ── API keys ─────────────────────────────────────────────────────
+          # Keys are NOT baked in at build time.
+          # Users supply their own keys at runtime via the Settings screen
+          # (first-run prompt — v0.2.0). The binary ships with no keys.
+
+          # ── macOS code signing (optional — remove comments to enable) ─────
+          # Without signing, macOS will show a Gatekeeper warning.
+          # Obtain a Developer ID certificate from developer.apple.com.
+          #
+          # APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID:                   ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
+
+        with:
+          tagName:      ${{ github.ref_name }}
+          releaseName:  "buddy ${{ github.ref_name }}"
+          releaseBody:  |
+            ## buddy ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | File |
+            |---|---|
+            | **Windows** | `buddy_*_x64-setup.exe` (recommended) or `buddy_*_x64_en-US.msi` |
+            | **macOS Apple Silicon** | `buddy_*_aarch64.dmg` |
+            | **macOS Intel** | `buddy_*_x64.dmg` |
+
+            ### ⚠️ API Keys required
+            buddy needs your own Anthropic and ElevenLabs API keys.
+            Follow the [setup guide in the README](https://github.com/${{ github.repository }}#setup) before running.
+
+            ### macOS note
+            If macOS says the app is damaged or from an unidentified developer, run:
+            ```
+            xattr -cr /Applications/buddy.app
+            ```
+
+          releaseDraft: true    # review before publishing
+          prerelease:   false
+          tauriScript:  pnpm tauri
+          args:         ${{ matrix.args }}

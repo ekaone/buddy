@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item -ItemType Directory -Force \"E:\\\\codes-two\\\\buddy\\\\src-tauri\\\\src\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"E:\\\\codes-two\\\\buddy\\\\src-tauri\\\\capabilities\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"E:\\\\codes-two\\\\buddy\\\\src\\\\components\\\\ui\")",
+      "PowerShell(New-Item -ItemType Directory -Force \"E:\\\\codes-two\\\\buddy\\\\src\\\\lib\")",
+      "PowerShell(Get-ChildItem \"E:\\\\codes-two\\\\buddy\" -Recurse -Force | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"E:\\\\codes-two\\\\buddy\\\\\", \"\"\\) } | Sort-Object)",
+      "Bash(pnpm exec *)"
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "buddy",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cross-platform desktop AI assistant",
+  "keywords": ["ai", "agent", "assistant", "desktop", "llm"],
+  "author": {
+    "name": "Eka Prasetia",
+    "email": "ekaone3033@gmail.com",
+    "url": "https://prasetia.me"
+  },
+  "homepage": "https://github.com/ekaone/buddy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ekaone/buddy"
+  },
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@elevenlabs/elevenlabs-js": "latest",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-autostart": "^2",
+    "@tauri-apps/plugin-store": "^2",
+    "@tauri-apps/plugin-global-shortcut": "^2.3.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwind-merge": "^3.6.0",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2.11.2",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
+  }
+}

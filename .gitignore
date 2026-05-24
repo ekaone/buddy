@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Testing
+coverage/
+.nyc_output/
+
+# Environment — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# ── Tauri / Rust ──────────────────────────────────────────
+
+# Cargo build artifacts
+src-tauri/target/
+
+# Tauri generated files (capabilities schema, Android/iOS project stubs)
+src-tauri/gen/
+
+# Tauri bundle output (installers, .app, .dmg, .msi, .deb, .AppImage)
+src-tauri/target/release/bundle/
+
+# Rust incremental compilation cache
+**/*.rs.bk
+
+# ── OS ────────────────────────────────────────────────────
+
+# macOS
+.DS_Store
+**/.DS_Store
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
