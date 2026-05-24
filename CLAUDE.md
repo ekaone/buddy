@@ -1,257 +1,286 @@
 # buddy — CLAUDE.md
 
-> Cross-platform desktop AI assistant (Tauri v2). Read this file fully before scaffolding anything.
+> Living documentation of the actual codebase. Keep this file in sync when making architectural changes.
 
 ---
 
-## Project overview
+## What buddy does
 
-**buddy** is a minimal desktop AI assistant triggered by a global hotkey.
+A minimal desktop AI assistant that lives in the Windows system tray. Press a global hotkey, drag a region on screen, and Claude analyses it — then ElevenLabs reads the answer aloud.
 
 ```
-hotkey → screenshot (xcap) → Claude vision API → ElevenLabs TTS → speak answer
+Ctrl+Shift+Space  →  fullscreen area selector  →  xcap screenshot  →  Claude vision  →  ElevenLabs TTS  →  spoken answer
 ```
 
-MVP target: `v0.1.0`, Windows first, cross-platform ready.
+No `.env` file. No API keys baked into the binary. Users enter their own keys at first launch; keys are stored locally in `%APPDATA%\com.buddy.dev\config.json` via `tauri-plugin-store`.
 
 ---
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Desktop shell | Tauri v2 + Rust |
-| Screenshot | `xcap` crate |
-| Frontend | React + Tailwind CSS + shadcn/ui |
-| State | Zustand |
-| AI vision | Anthropic SDK (`@anthropic-ai/sdk`) — direct, no wrapper |
-| TTS | ElevenLabs JS SDK (`@elevenlabs/elevenlabs-js`) — `play()` built-in |
-| Build | Vite |
-| Package manager | pnpm |
+| Layer | Technology | Notes |
+|---|---|---|
+| Desktop shell | **Tauri v2** + Rust | `tauri = "2"` — use v2 APIs only |
+| Screenshot | `xcap 0.2` | `png 0.17` used directly for encoding (avoids `image` crate conflicts) |
+| Frontend | **React 19** + **Tailwind v4** | Tailwind loaded via `@tailwindcss/vite` plugin — no `tailwind.config.js` |
+| State | **Zustand 5** | `useBuddyStore` — status + transcript |
+| AI vision | `@anthropic-ai/sdk` | `dangerouslyAllowBrowser: true` is intentional (Tauri WebView, not public web) |
+| TTS | `@elevenlabs/elevenlabs-js` | Web Audio API playback (chunks → Blob → `new Audio()`) — `play()` is Node-only |
+| Config storage | `tauri-plugin-store 2` | `config.json` via `load()` + `autoSave: true, defaults: {}` |
+| Autostart | `tauri-plugin-autostart 2` | Enabled silently on first run |
+| Build | Vite 8 | Dev server on port 1420 |
+| Package manager | pnpm | Always use pnpm, never npm/yarn |
 
 ---
 
-## Target directory structure
+## Directory structure (actual)
 
 ```
 buddy/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml          # type-check (ubuntu) + cargo check (windows) on push/PR
+│       └── release.yml     # tauri-action matrix: windows + macos arm + macos intel, triggered by v* tag
 ├── src-tauri/
 │   ├── Cargo.toml
-│   ├── tauri.conf.json
+│   ├── tauri.conf.json     # main window: 420×380, transparent, no decorations, hidden at start
+│   ├── capabilities/
+│   │   └── default.json    # permissions for both "main" and "selector" windows
 │   └── src/
-│       ├── main.rs          # Tauri app entry, hotkey registration
-│       ├── screenshot.rs    # xcap capture → base64 PNG
-│       └── lib.rs           # expose Tauri commands
+│       ├── main.rs         # calls lib::run()
+│       ├── lib.rs          # all Tauri setup: tray, hotkey, windows, commands
+│       └── screenshot.rs   # xcap capture → base64 PNG (capture_screen, capture_region)
 ├── src/
-│   ├── main.tsx             # React entry
-│   ├── App.tsx              # root component, IPC listeners
-│   ├── pipeline.ts          # Anthropic SDK + ElevenLabs SDK pipeline
-│   ├── store.ts             # Zustand store (status, transcript)
+│   ├── main.tsx            # React entry — routes "selector" label → <Selector>, else → <App>
+│   ├── App.tsx             # overlay logic: config check, pipeline runner, event listeners, stop handler
+│   ├── Selector.tsx        # fullscreen drag-to-select UI, emits buddy:region / buddy:cancel
+│   ├── Settings.tsx        # first-run API key form, Esc/× to dismiss
+│   ├── pipeline.ts         # capture → Claude → ElevenLabs pipeline with AbortSignal support
+│   ├── store.ts            # Zustand store: status, transcript
+│   ├── config.ts           # loadConfig / saveConfig / isConfigured via tauri-plugin-store
+│   ├── index.css           # @import "tailwindcss" (v4 syntax), transparent html/body/#root
+│   ├── vite-env.d.ts       # /// <reference types="vite/client" /> — required for CSS imports
 │   └── components/
-│       └── Overlay.tsx      # floating status card UI
-├── index.html
-├── vite.config.ts
-├── package.json
-└── CLAUDE.md                # this file
+│       ├── Overlay.tsx     # status card UI: badge + transcript + stop button
+│       └── ui/
+│           ├── badge.tsx   # CVA variants: idle / capturing / thinking / speaking / error
+│           └── card.tsx    # glass-morphism card (bg-black/50 backdrop-blur)
+├── src/lib/
+│   └── utils.ts            # cn() = clsx + tailwind-merge
+├── index.html              # inline <style> sets background:transparent to prevent white flash
+├── vite.config.ts          # plugins: react(), tailwindcss(); dev port 1420
+├── tsconfig.json           # strict: true, target ES2020, moduleResolution: bundler
+└── package.json
 ```
 
 ---
 
-## Rust side
+## Key architectural decisions
 
-### Cargo.toml dependencies
+### Multi-window routing
+There are two Tauri windows — `main` (the overlay card) and `selector` (fullscreen crosshair). Both load the same React bundle. `main.tsx` detects the current window label:
+
+```ts
+const label = getCurrentWebviewWindow().label
+// "selector" → <Selector />, anything else → <App />
+```
+
+The `selector` window is **pre-created in Rust** during `setup()` (hidden), not spawned from JavaScript. This avoids Tauri v2 capability complexity.
+
+### Runtime API keys (no .env)
+Keys are never compiled into the binary. `src/config.ts` uses `tauri-plugin-store`:
+
+```ts
+// ⚠️ defaults: {} is required — StoreOptions.defaults is mandatory in plugin-store 2.4+
+return load(STORE_FILE, { autoSave: true, defaults: {} })
+```
+
+`isConfigured()` is called on every `buddy:trigger` event — if keys are missing, the overlay shows the Settings form instead of the selector.
+
+### AbortController pipeline cancellation
+`App.tsx` holds a `controllerRef`. `handleStop()` (also wired to Esc) does:
+1. `controller.abort()` — stops capture delay / Claude fetch / audio mid-playback
+2. Clear the 4-second auto-hide timer
+3. `setStatus("idle")` + `setTranscript("")`
+4. `invoke("hide_overlay")` — dismiss immediately
+
+### DPI-aware window positioning
+`monitor.size()` returns **physical** pixels; `tauri.conf.json` dimensions are **logical**. On 125%+ DPI screens these differ. `lib.rs` setup uses:
+
+```rust
+let scale = monitor.scale_factor();
+let work  = monitor.work_area(); // physical px, already excludes taskbar
+let win_w = (420.0 * scale) as i32;
+let win_h = (380.0 * scale) as i32;
+```
+
+`work_area()` is available on `tauri::Monitor` in Tauri 2.11+ and returns a struct with `.position.x / .position.y / .size.width / .size.height`.
+
+### TTS audio playback (Web Audio API)
+`elevenlabs.textToSpeech.convert()` returns `AsyncIterable<Uint8Array>`. The SDK's `play()` helper is Node.js-only and crashes in Tauri. Instead:
+
+```ts
+const chunks: Uint8Array<ArrayBuffer>[] = []
+for await (const chunk of stream) {
+  chunks.push(chunk as Uint8Array<ArrayBuffer>) // TS 5.7+ generic Uint8Array — cast required
+}
+const blob = new Blob(chunks, { type: "audio/mpeg" })
+const url  = URL.createObjectURL(blob)
+new Audio(url).play()
+```
+
+### Tailwind v4
+No `tailwind.config.js`, no `@tailwind` directives. Config is:
+- `vite.config.ts` → `import tailwindcss from "@tailwindcss/vite"` in plugins
+- `src/index.css` → `@import "tailwindcss"` (first line)
+- `src/vite-env.d.ts` → `/// <reference types="vite/client" />` (required for the CSS import to type-check)
+
+---
+
+## Rust commands (IPC surface)
+
+| Command | Description |
+|---|---|
+| `capture_screen` | Full primary monitor → base64 PNG |
+| `capture_region(x, y, width, height)` | Crop region from primary monitor → base64 PNG. All values in **physical pixels**. Bounds-clamped. |
+| `show_overlay` / `hide_overlay` | Show/hide the `main` window |
+| `show_selector` / `hide_selector` | Show/hide the `selector` window |
+
+### DPI scaling in capture_region
+CSS mouse coordinates (logical px) must be multiplied by `window.devicePixelRatio` before being passed to `capture_region`. This happens in `Selector.tsx`:
+
+```ts
+const scale = window.devicePixelRatio || 1
+emit("buddy:region", {
+  x: Math.round(rect.x * scale),
+  y: Math.round(rect.y * scale),
+  width:  Math.round(rect.w * scale),
+  height: Math.round(rect.h * scale),
+})
+```
+
+---
+
+## Tauri events
+
+| Event | Direction | Payload | Purpose |
+|---|---|---|---|
+| `buddy:trigger` | Rust → JS | `()` | Hotkey fired — show selector or settings |
+| `buddy:region` | JS → JS | `{ x, y, width, height }` | Selector confirmed a region |
+| `buddy:cancel` | JS → JS | `()` | Selector dismissed (Esc or tiny drag) |
+
+---
+
+## Tauri capabilities (`src-tauri/capabilities/default.json`)
+
+Both windows (`main` and `selector`) share one capability file. Required permissions:
+- `core:default`
+- `global-shortcut:allow-register/unregister/is-registered`
+- `autostart:allow-enable/disable/is-enabled`
+- `store:allow-get/set/save/load`
+
+---
+
+## Rust dependencies (Cargo.toml)
 
 ```toml
-[dependencies]
-tauri = { version = "2", features = ["global-shortcut"] }
-xcap = "0.2"
-base64 = "0.22"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["full"] }
-```
-
-### src-tauri/src/screenshot.rs
-
-- Use `xcap::Monitor::all()` to get the primary monitor
-- Capture as `image::RgbaImage`, encode to PNG bytes, return as base64 string
-- Expose as Tauri command: `#[tauri::command] fn capture_screen() -> Result<String, String>`
-
-### src-tauri/src/main.rs
-
-- Register global shortcut (default: `CmdOrCtrl+Shift+Space`) via `tauri_plugin_global_shortcut`
-- On hotkey fire: emit Tauri event `"buddy:trigger"` to frontend
-- Register commands: `capture_screen`
-- Window: frameless, always-on-top, transparent background, small size (~400×120px), positioned bottom-right
-
-### tauri.conf.json notes
-
-```json
-{
-  "app": {
-    "windows": [{
-      "title": "buddy",
-      "width": 400,
-      "height": 120,
-      "decorations": false,
-      "alwaysOnTop": true,
-      "transparent": true,
-      "resizable": false
-    }]
-  },
-  "plugins": {
-    "global-shortcut": {}
-  }
-}
+tauri                    = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart   = "2"
+tauri-plugin-store       = "2"
+xcap                     = "0.2"
+base64                   = "0.22"
+png                      = "0.17"   # used directly — avoids xcap/image crate version conflicts
+serde                    = { version = "1", features = ["derive"] }
+serde_json               = "1"
+tokio                    = { version = "1", features = ["full"] }
 ```
 
 ---
 
-## TypeScript / React side
+## Development
 
-### package.json dependencies
-
-```json
-{
-  "dependencies": {
-    "@anthropic-ai/sdk": "latest",
-    "@elevenlabs/elevenlabs-js": "latest",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-global-shortcut": "^2",
-    "react": "^18",
-    "react-dom": "^18",
-    "zustand": "^4",
-    "tailwindcss": "^3",
-    "shadcn-ui": "latest"
-  }
-}
+```bash
+pnpm install
+pnpm tauri dev        # hot-reload frontend + Rust (first compile: ~3 min)
 ```
 
-### src/pipeline.ts
-
-Core pipeline — called when hotkey fires:
-
-```ts
-import Anthropic from "@anthropic-ai/sdk"
-import { ElevenLabsClient, play } from "@elevenlabs/elevenlabs-js"
-import { invoke } from "@tauri-apps/api/core"
-
-const anthropic = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true })
-const elevenlabs = new ElevenLabsClient({ apiKey: import.meta.env.VITE_ELEVENLABS_API_KEY })
-
-export async function runPipeline(onStatus: (s: string) => void, onTranscript: (t: string) => void) {
-  // 1. capture screen
-  onStatus("capturing")
-  const base64Png: string = await invoke("capture_screen")
-
-  // 2. Claude vision
-  onStatus("thinking")
-  const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 1024,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: "image/png", data: base64Png } },
-        { type: "text", text: "Describe what is on the screen concisely and answer any visible question or task." }
-      ]
-    }]
-  })
-
-  const text = response.content[0].type === "text" ? response.content[0].text : ""
-  onTranscript(text)
-
-  // 3. TTS + play
-  onStatus("speaking")
-  const audio = await elevenlabs.textToSpeech.convert(
-    import.meta.env.VITE_ELEVENLABS_VOICE_ID,
-    { text, modelId: "eleven_flash_v2_5" }
-  )
-  await play(audio)
-
-  onStatus("idle")
-}
+```bash
+pnpm tauri build      # production installer → src-tauri/target/release/bundle/
 ```
 
-### src/store.ts
-
-```ts
-import { create } from "zustand"
-
-type Status = "idle" | "capturing" | "thinking" | "speaking" | "error"
-
-interface BuddyStore {
-  status: Status
-  transcript: string
-  setStatus: (s: Status) => void
-  setTranscript: (t: string) => void
-}
-
-export const useBuddyStore = create<BuddyStore>((set) => ({
-  status: "idle",
-  transcript: "",
-  setStatus: (status) => set({ status }),
-  setTranscript: (transcript) => set({ transcript }),
-}))
-```
-
-### src/App.tsx
-
-- Listen for Tauri event `"buddy:trigger"` via `listen()` from `@tauri-apps/api/event`
-- On event: call `runPipeline(setStatus, setTranscript)`
-- Render `<Overlay />`
-
-### src/components/Overlay.tsx
-
-Minimal floating card:
-- Show status badge (idle / capturing / thinking / speaking)
-- Show last transcript text (truncated, ~2 lines max)
-- Tailwind + shadcn `Badge` and `Card` components
-- Transparent background, rounded, backdrop blur
-
----
-
-## Environment variables
-
-Create `.env` at project root (never commit):
-
-```
-VITE_ANTHROPIC_API_KEY=sk-ant-...
-VITE_ELEVENLABS_API_KEY=...
-VITE_ELEVENLABS_VOICE_ID=...   # any ElevenLabs voice ID
+### Type-check only (fast)
+```bash
+pnpm tsc --noEmit     # frontend
+cd src-tauri && cargo check  # Rust
 ```
 
 ---
 
-## MVP scope (v0.1.0) — what to build
+## CI / Release
 
-- [x] Global hotkey listener (Rust)
-- [x] `xcap` screen capture → base64 (Rust)
-- [x] Tauri IPC command `capture_screen`
-- [x] Tauri event `buddy:trigger` emitted on hotkey
-- [x] Claude vision call via Anthropic SDK (TS)
-- [x] ElevenLabs TTS + `play()` (TS)
-- [x] Zustand store for status + transcript
-- [x] Floating overlay React UI
-- [x] `.env` config for API keys + voice ID
+**CI** (`.github/workflows/ci.yml`) — runs on push to `main`/`dev` and PRs:
+- `frontend` job: `pnpm tsc --noEmit` on ubuntu-latest
+- `rust` job: `cargo check` on windows-latest
 
-## Deferred (v0.2.0)
+**Release** (`.github/workflows/release.yml`) — triggered by a version tag:
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+# → builds Windows (.exe + .msi), macOS arm64 (.dmg), macOS x64 (.dmg)
+# → creates a draft GitHub Release — review before publishing
+```
 
-- Hotkey customization UI
-- Voice selector
-- Transcript history
-- Settings panel
-- Multi-monitor support (xcap monitor picker)
-- Mute / abort mid-speech
+No VITE_* secrets needed. `GITHUB_TOKEN` is auto-provided. Keys are runtime, not build-time.
 
 ---
 
-## Notes for Claude Code
+## Status values and pipeline flow
 
-1. Scaffold all files listed in the directory structure above
-2. Use `pnpm` as the package manager
-3. Use Tauri v2 APIs only — not v1 (`@tauri-apps/api/core` not `@tauri-apps/api/tauri`)
-4. The `dangerouslyAllowBrowser: true` flag on the Anthropic client is intentional — this runs inside Tauri, not a public browser
-5. Use `eleven_flash_v2_5` model for lowest latency TTS
-6. Use `claude-haiku-4-5` for lowest latency vision — swap to `claude-sonnet-4-5` only if accuracy needs improvement
-7. Keep the overlay UI minimal — this is a background utility, not a primary app window
+```
+idle → capturing → thinking → speaking → idle
+                                       ↘ error (on any throw)
+```
+
+`App.tsx` auto-shows the overlay on any non-idle/non-error status and auto-hides 4 seconds after returning to idle. `handleStop()` or Esc skips the 4-second wait and hides immediately.
+
+---
+
+## Known gotchas
+
+| Gotcha | Detail |
+|---|---|
+| `StoreOptions.defaults` required | `load(file, { autoSave: true })` fails — must include `defaults: {}` |
+| `Uint8Array` generic in TS 5.7+ | `Uint8Array<ArrayBufferLike>` ≠ `BlobPart`; use `Uint8Array<ArrayBuffer>[]` and cast at push |
+| CSS import type error | `import "./index.css"` needs `src/vite-env.d.ts` with `/// <reference types="vite/client" />` |
+| ElevenLabs `play()` Node-only | Use Web Audio API (chunks → Blob → `new Audio(url)`) instead |
+| xcap primary monitor | Use `.find(|m| m.is_primary())` — `into_iter().next()` is not guaranteed to be primary |
+| Close → hide | `on_window_event` intercepts `CloseRequested` and calls `prevent_close()` + `hide()` |
+| White flash on startup | Inline `<style>` in `index.html` sets `background: transparent` before JS loads |
+| Error 1412 on quit | `Failed to unregister class Chrome_WidgetWin_0` — harmless WebView2 cleanup race, app exits correctly |
+
+---
+
+## Roadmap
+
+### v0.1.0 ✅ (shipped)
+- Global hotkey (`Ctrl+Shift+Space`)
+- Fullscreen area selector with dimension badge
+- Claude vision analysis (`claude-haiku-4-5`)
+- ElevenLabs TTS (`eleven_flash_v2_5`) via Web Audio API
+- Overlay status card with transcript (scrollable)
+- Stop button (`×`) + Esc shortcut to abort mid-pipeline
+- System tray with `Start on login` toggle (CheckMenuItem)
+- Auto-start on login (enabled on first run)
+- First-run Settings screen for API keys (runtime, not env vars)
+- Esc / × to dismiss Settings without saving
+- DPI-aware window positioning using `work_area()`
+- CI (type-check + cargo check) + Release workflows (Windows + macOS)
+
+### v0.2.0 (planned)
+- [ ] Settings accessible from tray menu (update keys without deleting config.json)
+- [ ] Hotkey customization UI
+- [ ] Voice selector (list ElevenLabs voices)
+- [ ] Transcript history
+- [ ] Multi-monitor support (let user pick which monitor xcap captures)
+- [ ] macOS code signing (Gatekeeper)

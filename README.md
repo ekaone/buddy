@@ -68,7 +68,7 @@ pnpm tauri build     # build installer → src-tauri/target/release/bundle/
 ## First-run setup
 
 On first launch, buddy shows a **Setup screen** to collect your API keys.  
-Keys are saved **only on your machine** (`%APPDATA%\buddy\config.json` on Windows). They are never sent anywhere other than the respective APIs.
+Keys are saved **only on your machine** (`%APPDATA%\com.buddy.dev\config.json` on Windows). They are never sent anywhere other than the respective APIs.
 
 <details>
 <summary>Where to find each key</summary>
@@ -205,7 +205,7 @@ git push origin v0.1.0
 
 **Error on startup: API key invalid**
 - Right-click the tray icon → there is no settings option yet (v0.2.0 roadmap).
-- For now: delete `%APPDATA%\buddy\config.json` and restart buddy to re-enter your keys.
+- For now: delete `%APPDATA%\com.buddy.dev\config.json` and restart buddy to re-enter your keys.
 
 **macOS: "buddy is damaged and can't be opened"**
 ```bash
