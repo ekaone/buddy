@@ -21,7 +21,7 @@ No `.env` file. No API keys baked into the binary. Users enter their own keys at
 | Layer | Technology | Notes |
 |---|---|---|
 | Desktop shell | **Tauri v2** + Rust | `tauri = "2"` — use v2 APIs only |
-| Screenshot | `xcap 0.2` | `png 0.17` used directly for encoding (avoids `image` crate conflicts) |
+| Screenshot | `xcap 0.8` | `png 0.17` used directly for encoding (avoids `image` crate conflicts) |
 | Frontend | **React 19** + **Tailwind v4** | Tailwind loaded via `@tailwindcss/vite` plugin — no `tailwind.config.js` |
 | State | **Zustand 5** | `useBuddyStore` — status + transcript |
 | AI vision | `@anthropic-ai/sdk` | `dangerouslyAllowBrowser: true` is intentional (Tauri WebView, not public web) |

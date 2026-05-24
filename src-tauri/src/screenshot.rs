@@ -5,7 +5,7 @@ fn primary_monitor() -> Result<Monitor, String> {
     Monitor::all()
         .map_err(|e| e.to_string())?
         .into_iter()
-        .find(|m| m.is_primary())
+        .find(|m| m.is_primary().unwrap_or(false))
         .ok_or_else(|| "No primary monitor found".to_string())
 }
 

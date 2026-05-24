@@ -19,7 +19,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-store = "2"
-xcap = "0.2"
+xcap = "0.8"
 base64 = "0.22"
 png = "0.17"
 serde = { version = "1", features = ["derive"] }
