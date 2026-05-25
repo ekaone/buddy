@@ -1,5 +1,5 @@
-// Prevents additional console window on Windows in release
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Never show a console window — buddy is a background tray app
+#![windows_subsystem = "windows"]
 
 fn main() {
     buddy_lib::run()

@@ -58,7 +58,10 @@ pub fn run() {
             None,
         ))
         .setup(|app| {
-            // ── Autostart: enable silently on first run 
+            // ── Autostart: enable silently on first run (release only) ───
+            // Dev binaries must never be registered — they live in a
+            // temporary build dir and would show a stale path on login.
+            #[cfg(not(debug_assertions))]
             let _ = app.autolaunch().enable();
 
             // ── Main overlay window: hidden by default 
