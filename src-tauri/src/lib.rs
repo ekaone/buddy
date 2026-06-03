@@ -7,6 +7,9 @@ use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 mod screenshot;
+mod audio;
+
+use audio::AudioState;
 
 // ── Overlay show / hide (called from App.tsx via invoke) 
 
@@ -57,6 +60,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .manage(AudioState(std::sync::Mutex::new(None)))
         .setup(|app| {
             // ── Autostart: enable silently on first run (release only) ───
             // Dev binaries must never be registered — they live in a
@@ -147,12 +151,23 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // ── Global hotkey 
+            // ── Global hotkeys ────────────────────────────────────────────
+            // Ctrl+Shift+Space — screenshot → Claude → TTS (v0.1.0)
             app.handle().global_shortcut().on_shortcut(
                 "CmdOrCtrl+Shift+Space",
                 |app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         app.emit("buddy:trigger", ()).ok();
+                    }
+                },
+            )?;
+
+            // Ctrl+Shift+R — toggle meeting audio capture (v0.2.0)
+            app.handle().global_shortcut().on_shortcut(
+                "CmdOrCtrl+Shift+R",
+                |app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        app.emit("buddy:capture_toggle", ()).ok();
                     }
                 },
             )?;
@@ -166,6 +181,9 @@ pub fn run() {
             hide_overlay,
             show_selector,
             hide_selector,
+            audio::start_capture,
+            audio::stop_capture,
+            audio::set_drawer_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

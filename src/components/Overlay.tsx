@@ -1,26 +1,39 @@
-import { useBuddyStore } from "../store";
-import { Card } from "./ui/card";
-import { Badge } from "./ui/badge";
+import { useBuddyStore } from "../store"
+import { Card } from "./ui/card"
+import { Badge } from "./ui/badge"
+import Drawer from "./Drawer"
 
 const STATUS_LABELS: Record<string, string> = {
-  idle: "idle",
+  idle:      "idle",
   capturing: "capturing…",
-  thinking: "thinking…",
-  speaking: "speaking…",
-  error: "error",
-};
-
-const PULSE_STATUSES = new Set(["capturing", "thinking", "speaking"]);
-
-interface OverlayProps {
-  onStop?: () => void;
+  thinking:  "thinking…",
+  speaking:  "speaking…",
+  error:     "error",
 }
 
-export default function Overlay({ onStop }: OverlayProps) {
-  const status     = useBuddyStore((s) => s.status);
-  const transcript = useBuddyStore((s) => s.transcript);
+const PULSE_STATUSES = new Set(["capturing", "thinking", "speaking"])
 
-  const isActive = PULSE_STATUSES.has(status);
+interface OverlayProps {
+  onStop:         () => void  // abort v0.1.0 pipeline
+  onStopCapture:  () => void  // stop v0.2.0 recording
+}
+
+export default function Overlay({ onStop, onStopCapture }: OverlayProps) {
+  const status      = useBuddyStore((s) => s.status)
+  const transcript  = useBuddyStore((s) => s.transcript)
+  const isCapturing = useBuddyStore((s) => s.isCapturing)
+
+  // ── v0.2.0: full-height side drawer while recording (or just stopped) ──────
+  if (isCapturing) {
+    return (
+      <div style={{ width: "100%", height: "100%" }}>
+        <Drawer onStop={onStopCapture} />
+      </div>
+    )
+  }
+
+  // ── v0.1.0: compact card ────────────────────────────────────────────────────
+  const isActive = PULSE_STATUSES.has(status)
 
   return (
     <div className="flex items-end justify-end w-full h-full p-3">
@@ -37,7 +50,7 @@ export default function Overlay({ onStop }: OverlayProps) {
             {STATUS_LABELS[status] ?? status}
           </Badge>
 
-          {/* Stop button — only while pipeline is running */}
+          {/* Stop button — visible while pipeline is running */}
           {isActive && (
             <button
               onClick={onStop}
@@ -49,7 +62,7 @@ export default function Overlay({ onStop }: OverlayProps) {
           )}
         </div>
 
-        {/* Transcript — scrollable, full text */}
+        {/* Transcript */}
         {transcript && (
           <div className="overflow-y-auto flex-1 pr-1 scrollbar-thin">
             <p className="text-white/85 text-xs leading-relaxed select-text whitespace-pre-wrap break-words">
@@ -61,10 +74,10 @@ export default function Overlay({ onStop }: OverlayProps) {
         {/* Idle hint */}
         {!transcript && status === "idle" && (
           <p className="text-white/30 text-xs">
-            Press Ctrl+Shift+Space to analyse screen
+            Ctrl+Shift+Space to analyse · Ctrl+Shift+R to record
           </p>
         )}
       </Card>
     </div>
-  );
+  )
 }
