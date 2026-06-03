@@ -1,8 +1,9 @@
 # buddy
 
-> A minimal desktop AI assistant, press a hotkey, draw a region, hear the answer spoken aloud.
+> A minimal desktop AI assistant — analyse anything on screen, or transcribe a live meeting in real time.
 ```
 Ctrl+Shift+Space  →  draw a region  →  Claude sees it  →  ElevenLabs speaks the answer
+Ctrl+Shift+R      →  toggle recording  →  system audio  →  ElevenLabs Scribe v2  →  live transcript
 ```
 
 [![CI](https://github.com/ekaone/buddy/actions/workflows/ci.yml/badge.svg)](https://github.com/ekaone/buddy/actions/workflows/ci.yml)
@@ -12,9 +13,15 @@ Ctrl+Shift+Space  →  draw a region  →  Claude sees it  →  ElevenLabs speak
 
 ## What it does
 
-buddy sits silently in your **system tray**. Press the hotkey anywhere and a fullscreen crosshair selector appears. Draw a rectangle around anything on screen — a question, an error message, a diagram, a document — and within seconds Claude describes it and ElevenLabs reads the answer out loud. The overlay card disappears automatically after speaking.
+buddy sits silently in your **system tray**. Two modes:
 
-No window stays open. No taskbar button. Just a hotkey.
+**Screen analysis (v0.1.0)**  
+Press `Ctrl+Shift+Space` and draw a rectangle around anything on screen — a question, an error message, a diagram. Within seconds Claude describes it and ElevenLabs reads the answer aloud. The overlay card disappears automatically.
+
+**Live meeting transcription (v0.2.0)**  
+Press `Ctrl+Shift+R` to start capturing system audio (what comes out of your speakers — other participants' voices). ElevenLabs Scribe v2 transcribes in real time and a side drawer shows the live rolling transcript. Press `Ctrl+Shift+R` again to stop.
+
+No window stays open. No taskbar button. Just hotkeys.
 
 ---
 
@@ -25,7 +32,8 @@ No window stays open. No taskbar button. Just a hotkey.
 | **OS** | Windows 10 / 11 (macOS planned) |
 | **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com) — free tier works |
 | **ElevenLabs API key** | [elevenlabs.io](https://elevenlabs.io) — free tier: 10 k chars/month |
-| **ElevenLabs Voice ID** | Any voice from the library |
+| **ElevenLabs Voice ID** | Any voice from the library (for TTS in v0.1.0) |
+| **ElevenLabs Scribe v2** | Required for live transcription (v0.2.0) — check your plan includes it |
 
 ---
 
@@ -96,41 +104,57 @@ After saving, the setup screen disappears and buddy is ready. Your keys are load
 
 ## How to use
 
-### 1. Trigger buddy
+### Mode 1 — Screen analysis
 
-Press **Ctrl+Shift+Space** from anywhere on your desktop.
+**1. Trigger buddy**
 
-A dark fullscreen overlay appears with the message *"Drag to select an area"*.
+Press **Ctrl+Shift+Space** from anywhere. A dark fullscreen overlay appears: *"Drag to select an area"*.
 
-### 2. Select a region
+**2. Select a region**
 
-Click and drag to draw a rectangle around what you want Claude to analyse.  
-A dimension badge (e.g. `823×418`) appears at the top-left of your selection.
+Click and drag around what you want Claude to analyse. Release to confirm.
 
 | Key / Action | Result |
 |---|---|
 | **Drag** | Draw selection |
-| **Release mouse** | Confirm selection, start pipeline |
-| **Esc** | Cancel — close the selector |
-| **Ctrl+Shift+Space** (again) | Cancel current response and reopen selector |
+| **Release mouse** | Confirm, start pipeline |
+| **Esc** | Cancel |
+| **Ctrl+Shift+Space** (again) | Cancel current response, reopen selector |
 
-### 3. Watch the pipeline
+**3. Watch the pipeline**
 
-After releasing the mouse, the selector closes and a small overlay card appears in the **bottom-right corner** of your screen:
+A small overlay card appears bottom-right:
 
 | Badge | What's happening |
 |---|---|
-| 🔵 `capturing…` | Taking a screenshot of your selected area |
-| 🟣 `thinking…` | Sending the image to Claude for analysis |
-| 🟢 `speaking…` | ElevenLabs is reading the answer aloud |
-| `idle` | Done — overlay auto-hides in 4 seconds |
+| `capturing…` | Taking a screenshot of the selected region |
+| `thinking…` | Claude is analysing the image |
+| `speaking…` | ElevenLabs is reading the answer aloud |
+| `idle` | Done — overlay auto-hides after 4 seconds |
 | `error` | Something went wrong (see Troubleshooting) |
 
-The full Claude response is shown as scrollable text inside the card.
+---
 
-### 4. Listen and read
+### Mode 2 — Live meeting transcription
 
-Claude's answer is read aloud automatically. The card shows the full transcript in case you miss anything or want to re-read it.
+**1. Start recording**
+
+Press **Ctrl+Shift+R**. The overlay expands to a full-height side drawer on the right edge of your screen with a pulsing **● REC** badge.
+
+buddy captures **system audio** (what comes out of your speakers — meeting participants' voices), not your microphone.
+
+**2. Watch the transcript**
+
+Words appear in real time as Scribe processes the audio:
+- **Grey / italic** — partial result (still being refined)
+- **White / normal** — committed (final)
+
+The drawer auto-scrolls to the latest text. Scroll up to read back; a **↓ latest** button appears to jump back down.
+
+**3. Stop recording**
+
+Press **Ctrl+Shift+R** again, or click the **Stop** button in the drawer header.  
+The drawer shows "● REC stopped" for 3 seconds, then collapses back to the compact card.
 
 ---
 
@@ -204,8 +228,7 @@ git push origin v0.1.0
 - Verify your ElevenLabs Voice ID is valid (not the placeholder text).
 
 **Error on startup: API key invalid**
-- Right-click the tray icon → there is no settings option yet (v0.2.0 roadmap).
-- For now: delete `%APPDATA%\com.buddy.dev\config.json` and restart buddy to re-enter your keys.
+- Delete `%APPDATA%\com.buddy.dev\config.json` and restart buddy to re-enter your keys via the setup screen.
 
 **macOS: "buddy is damaged and can't be opened"**
 ```bash
@@ -219,21 +242,33 @@ Harmless — a WebView2 cleanup race during process exit. The app exits correctl
 
 ## Roadmap
 
-### v0.1.0 ✅ (current)
-- Global hotkey listener
-- Fullscreen area selector
+### v0.1.0 ✅
+- Global hotkey (`Ctrl+Shift+Space`)
+- Fullscreen region selector
 - Claude vision analysis
 - ElevenLabs TTS playback
 - System tray with auto-start
 - First-run API key setup screen
 
-### v0.2.0 (planned)
-- [ ] Settings screen accessible from tray (to update keys)
-- [ ] Hotkey customization UI
-- [ ] Voice selector
-- [ ] Transcript history
-- [ ] Multi-monitor support
-- [ ] Mute / abort mid-speech
+### v0.2.0 ✅ (current)
+- Global hotkey (`Ctrl+Shift+R`) to toggle meeting capture
+- WASAPI loopback — captures system audio, not the mic
+- ElevenLabs Scribe v2 realtime streaming transcription
+- Live transcript side drawer with partial / committed segments
+- Auto-scroll with manual scroll-back support
+
+### v0.3.0 (planned)
+- [ ] Real-time translation of committed sentences via Claude Haiku
+- [ ] Sentence-boundary buffering (handles verb-final languages)
+- [ ] Two-line segment UI — original + translation
+- [ ] Target language selector in drawer header
+
+### Deferred
+- Speaker diarization
+- Save / export transcript
+- Hotkey customization UI
+- Multi-monitor support
+- macOS ScreenCaptureKit audio path
 
 ---
 
