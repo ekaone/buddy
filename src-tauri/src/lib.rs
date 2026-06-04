@@ -45,41 +45,50 @@ fn hide_selector(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn export_transcript(
-    app: tauri::AppHandle,
-    filename: String,
-    content: String,
-) -> Result<String, String> {
-    if content.trim().is_empty() {
-        return Err("Transcript is empty".into());
-    }
-
+fn sanitize_export_filename(filename: &str) -> String {
     let safe_filename = filename
         .chars()
         .map(|ch| match ch {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => ch,
             _ => '-',
         })
-        .collect::<String>();
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
 
-    let safe_filename = if safe_filename.ends_with(".txt") {
+    if safe_filename.is_empty() {
+        "buddy-export.txt".into()
+    } else if safe_filename.to_ascii_lowercase().ends_with(".txt") {
         safe_filename
     } else {
         format!("{safe_filename}.txt")
+    }
+}
+
+#[tauri::command]
+fn export_text_file(
+    window: tauri::Window,
+    default_filename: String,
+    content: String,
+) -> Result<Option<String>, String> {
+    if content.trim().is_empty() {
+        return Err("Nothing to export".into());
+    }
+
+    let safe_filename = sanitize_export_filename(&default_filename);
+    let Some(path) = rfd::FileDialog::new()
+        .set_parent(&window)
+        .set_title("Save Buddy output")
+        .set_file_name(&safe_filename)
+        .add_filter("Text file", &["txt"])
+        .save_file()
+    else {
+        return Ok(None);
     };
 
-    let mut path = app
-        .path()
-        .download_dir()
-        .or_else(|_| app.path().app_data_dir())
-        .map_err(|e| e.to_string())?;
-
-    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    path.push(safe_filename);
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
 
-    Ok(path.to_string_lossy().to_string())
+    Ok(Some(path.to_string_lossy().to_string()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -185,7 +194,7 @@ pub fn run() {
             hide_overlay,
             show_selector,
             hide_selector,
-            export_transcript,
+            export_text_file,
             audio::start_capture,
             audio::stop_capture,
             audio::set_drawer_open,

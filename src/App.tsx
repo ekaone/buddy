@@ -44,6 +44,17 @@ const STATUS_LABELS: Record<string, string> = {
 
 const MARKDOWN_PLUGINS = { code, mermaid, math, cjk }
 
+function exportStamp() {
+  return new Date().toISOString().slice(0, 16).replace("T", "-").replace(":", "-")
+}
+
+async function saveTextExport(defaultFilename: string, content: string) {
+  return await invoke<string | null>("export_text_file", {
+    defaultFilename,
+    content,
+  })
+}
+
 export default function App() {
   const status = useBuddyStore((s) => s.status)
   const setStatus = useBuddyStore((s) => s.setStatus)
@@ -76,8 +87,12 @@ export default function App() {
     controllerRef.current?.abort()
     controllerRef.current = null
     setStatus("idle")
+  }, [setStatus])
+
+  const clearRegionOutput = useCallback(() => {
     setTranscript("")
-  }, [setStatus, setTranscript])
+    setCaptureError("")
+  }, [setTranscript])
 
   const requestRegionCapture = useCallback(async () => {
     const ready = await isConfigured()
@@ -106,6 +121,7 @@ export default function App() {
       setLastRegion(region)
       setActiveSection("capture")
       setCaptureError("")
+      setTranscript("")
 
       runPipeline(
         (s) => setStatus(s as Parameters<typeof setStatus>[0]),
@@ -317,6 +333,7 @@ export default function App() {
             error={captureError}
             onCapture={requestRegionCapture}
             onStop={handleStop}
+            onClear={clearRegionOutput}
           />
         )}
       </main>
@@ -472,6 +489,7 @@ function LiveTranscriptionSection({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [exportPath, setExportPath] = useState("")
   const [exportError, setExportError] = useState("")
+  const [exporting, setExporting] = useState(false)
   const exportText = useMemo(
     () =>
       segments
@@ -490,22 +508,18 @@ function LiveTranscriptionSection({
   const exportTranscript = async () => {
     if (!exportText) return
 
-    const stamp = new Date()
-      .toISOString()
-      .slice(0, 16)
-      .replace("T", "-")
-      .replace(":", "-")
+    const stamp = exportStamp()
     setExportPath("")
     setExportError("")
+    setExporting(true)
 
     try {
-      const path = await invoke<string>("export_transcript", {
-        filename: `buddy-transcript-${stamp}.txt`,
-        content: exportText,
-      })
-      setExportPath(path)
+      const path = await saveTextExport(`buddy-transcript-${stamp}.txt`, exportText)
+      setExportPath(path ?? "Export canceled")
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -521,10 +535,10 @@ function LiveTranscriptionSection({
             <button
               className="ghost-button icon-text-button"
               onClick={exportTranscript}
-              disabled={!exportText}
+              disabled={!exportText || exporting}
             >
               <Download size={15} strokeWidth={2.2} />
-              Export .txt
+              {exporting ? "Opening..." : "Export .txt"}
             </button>
             <button className="ghost-button" onClick={onClear}>
               Clear
@@ -591,6 +605,7 @@ function RegionCaptureSection({
   error,
   onCapture,
   onStop,
+  onClear,
 }: {
   status: string
   transcript: string
@@ -598,8 +613,38 @@ function RegionCaptureSection({
   error: string
   onCapture: () => void
   onStop: () => void
+  onClear: () => void
 }) {
   const active = status === "capturing" || status === "thinking" || status === "speaking"
+  const [exportPath, setExportPath] = useState("")
+  const [exportError, setExportError] = useState("")
+  const [exporting, setExporting] = useState(false)
+
+  const exportCapture = async () => {
+    if (!transcript.trim()) return
+
+    setExportPath("")
+    setExportError("")
+    setExporting(true)
+
+    try {
+      const path = await saveTextExport(
+        `buddy-capture-${exportStamp()}.txt`,
+        transcript.trim(),
+      )
+      setExportPath(path ?? "Export canceled")
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const clearCapture = () => {
+    onClear()
+    setExportPath("")
+    setExportError("")
+  }
 
   return (
     <section className="content-grid capture-layout">
@@ -610,6 +655,21 @@ function RegionCaptureSection({
             <h2>{STATUS_LABELS[status] ?? status}</h2>
           </div>
           <div className="toolbar-actions">
+            <button
+              className="ghost-button icon-text-button"
+              onClick={exportCapture}
+              disabled={!transcript.trim() || exporting}
+            >
+              <Download size={15} strokeWidth={2.2} />
+              {exporting ? "Opening..." : "Export .txt"}
+            </button>
+            <button
+              className="ghost-button"
+              onClick={clearCapture}
+              disabled={!transcript.trim() && !error}
+            >
+              Clear
+            </button>
             {active && (
               <button className="ghost-button" onClick={onStop}>
                 Stop
@@ -698,6 +758,12 @@ function RegionCaptureSection({
             <dd>Ctrl + Shift + Space</dd>
           </div>
         </dl>
+        {(exportPath || exportError) && (
+          <div className={exportError ? "export-note error" : "export-note"}>
+            <strong>{exportError ? "Export failed" : "Export saved"}</strong>
+            <p>{exportError || exportPath}</p>
+          </div>
+        )}
       </aside>
     </section>
   )
