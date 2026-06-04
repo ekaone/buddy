@@ -64,6 +64,7 @@ export default function App() {
   const setCapturing = useBuddyStore((s) => s.setCapturing)
   const liveTranscript = useBuddyStore((s) => s.liveTranscript)
   const upsertSegment = useBuddyStore((s) => s.upsertSegment)
+  const finalizeLiveTranscript = useBuddyStore((s) => s.finalizeLiveTranscript)
   const clearLiveTranscript = useBuddyStore((s) => s.clearLiveTranscript)
 
   const controllerRef = useRef<AbortController | null>(null)
@@ -92,6 +93,7 @@ export default function App() {
   const clearRegionOutput = useCallback(() => {
     setTranscript("")
     setCaptureError("")
+    setLastRegion(null)
   }, [setTranscript])
 
   const requestRegionCapture = useCallback(async () => {
@@ -162,10 +164,11 @@ export default function App() {
       await invoke("stop_capture")
     } catch (_) {
       /* ignore */
+    } finally {
+      finalizeLiveTranscript()
+      setCapturing(false)
     }
-
-    setCapturing(false)
-  }, [setCapturing])
+  }, [finalizeLiveTranscript, setCapturing])
 
   const toggleCapture = useCallback(async () => {
     const ready = await isConfigured()
@@ -747,11 +750,11 @@ function RegionCaptureSection({
         <dl>
           <div>
             <dt>Width</dt>
-            <dd>{lastRegion ? `${lastRegion.width}px` : "--"}</dd>
+            <dd>{lastRegion ? `${lastRegion.width}px` : "0"}</dd>
           </div>
           <div>
             <dt>Height</dt>
-            <dd>{lastRegion ? `${lastRegion.height}px` : "--"}</dd>
+            <dd>{lastRegion ? `${lastRegion.height}px` : "0"}</dd>
           </div>
           <div>
             <dt>Shortcut</dt>

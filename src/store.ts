@@ -31,6 +31,7 @@ interface BuddyStore {
   setCapturing:   (b: boolean) => void
   /** Add a new partial segment or replace an existing partial with a committed one. */
   upsertSegment:  (seg: Segment) => void
+  finalizeLiveTranscript: () => void
   clearLiveTranscript: () => void
 }
 
@@ -76,6 +77,19 @@ export const useBuddyStore = create<BuddyStore>((set) => ({
 
       return { liveTranscript: segments }
     }),
+
+  finalizeLiveTranscript: () =>
+    set((state) => ({
+      liveTranscript: state.liveTranscript.map((seg) =>
+        seg.committed
+          ? seg
+          : {
+              ...seg,
+              id: seg.id === "partial" ? `final-${Date.now()}` : seg.id,
+              committed: true,
+            },
+      ),
+    })),
 
   clearLiveTranscript: () => set({ liveTranscript: [] }),
 }))

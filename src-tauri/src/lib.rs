@@ -167,23 +167,27 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            app.handle().global_shortcut().on_shortcut(
+            if let Err(err) = app.handle().global_shortcut().on_shortcut(
                 "CmdOrCtrl+Shift+Space",
                 |app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         app.emit("buddy:trigger", ()).ok();
                     }
                 },
-            )?;
+            ) {
+                eprintln!("[shortcut] Ctrl+Shift+Space unavailable: {err}");
+            }
 
-            app.handle().global_shortcut().on_shortcut(
+            if let Err(err) = app.handle().global_shortcut().on_shortcut(
                 "CmdOrCtrl+Shift+R",
                 |app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         app.emit("buddy:capture_toggle", ()).ok();
                     }
                 },
-            )?;
+            ) {
+                eprintln!("[shortcut] Ctrl+Shift+R unavailable: {err}");
+            }
 
             Ok(())
         })
