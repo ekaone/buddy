@@ -30,6 +30,15 @@ export async function saveConfig(cfg: Config): Promise<void> {
   await store.set("anthropicApiKey",   cfg.anthropicApiKey)
   await store.set("elevenLabsApiKey",  cfg.elevenLabsApiKey)
   await store.set("elevenLabsVoiceId", cfg.elevenLabsVoiceId)
+  await store.save()
+}
+
+export async function deleteConfig(): Promise<void> {
+  const store = await getStore()
+  await store.delete("anthropicApiKey")
+  await store.delete("elevenLabsApiKey")
+  await store.delete("elevenLabsVoiceId")
+  await store.save()
 }
 
 export async function isConfigured(): Promise<boolean> {

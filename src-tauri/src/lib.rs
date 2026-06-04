@@ -6,12 +6,10 @@ use tauri::{
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-mod screenshot;
 mod audio;
+mod screenshot;
 
 use audio::AudioState;
-
-// ── Overlay show / hide (called from App.tsx via invoke) 
 
 #[tauri::command]
 fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
@@ -30,8 +28,6 @@ fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// ── Selector show / hide 
-
 #[tauri::command]
 fn show_selector(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("selector") {
@@ -49,7 +45,42 @@ fn hide_selector(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// ── App entry 
+#[tauri::command]
+fn export_transcript(
+    app: tauri::AppHandle,
+    filename: String,
+    content: String,
+) -> Result<String, String> {
+    if content.trim().is_empty() {
+        return Err("Transcript is empty".into());
+    }
+
+    let safe_filename = filename
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => ch,
+            _ => '-',
+        })
+        .collect::<String>();
+
+    let safe_filename = if safe_filename.ends_with(".txt") {
+        safe_filename
+    } else {
+        format!("{safe_filename}.txt")
+    };
+
+    let mut path = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| e.to_string())?;
+
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    path.push(safe_filename);
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().to_string())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -62,33 +93,12 @@ pub fn run() {
         ))
         .manage(AudioState(std::sync::Mutex::new(None)))
         .setup(|app| {
-            // ── Autostart: enable silently on first run (release only) ───
-            // Dev binaries must never be registered — they live in a
-            // temporary build dir and would show a stale path on login.
             #[cfg(not(debug_assertions))]
             let _ = app.autolaunch().enable();
 
-            // ── Main overlay window: hidden by default 
             let main_win = app.get_webview_window("main").expect("main window not found");
-            if let Ok(Some(monitor)) = main_win.current_monitor() {
-                let scale = monitor.scale_factor();
-                let work  = monitor.work_area(); // physical px, excludes taskbar
 
-                // Convert logical window size (from tauri.conf.json) → physical px
-                let win_w = (420.0 * scale) as i32;
-                let win_h = (380.0 * scale) as i32;
-                let gap   = (12.0  * scale) as i32; // 12 logical px breathing room
-
-                // Anchor bottom-right corner to bottom-right of the usable work area
-                let x = work.position.x + work.size.width  as i32 - win_w - gap;
-                let y = work.position.y + work.size.height as i32 - win_h - gap;
-                let _ = main_win.set_position(tauri::Position::Physical(
-                    tauri::PhysicalPosition::new(x, y),
-                ));
-            }
-            // Keep main window hidden — it shows only when pipeline is active
-
-            // Intercept close → hide instead of quit
+            // Closing hides to the tray; Quit Buddy exits the process.
             let main_clone = main_win.clone();
             main_win.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -97,7 +107,6 @@ pub fn run() {
                 }
             });
 
-            // ── Selector window: pre-created hidden 
             tauri::WebviewWindowBuilder::new(
                 app,
                 "selector",
@@ -111,7 +120,6 @@ pub fn run() {
             .visible(false)
             .build()?;
 
-            // ── System tray 
             let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
 
             let item_autostart = CheckMenuItem::with_id(
@@ -122,16 +130,15 @@ pub fn run() {
                 autostart_enabled,
                 None::<&str>,
             )?;
-            let separator  = PredefinedMenuItem::separator(app)?;
-            let item_quit  = MenuItem::with_id(app, "quit", "Quit buddy", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let item_quit = MenuItem::with_id(app, "quit", "Quit Buddy", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&item_autostart, &separator, &item_quit])?;
 
-            // Clone so the event closure can toggle the check state
             let item_autostart_ref = item_autostart.clone();
 
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("buddy — Ctrl+Shift+Space to capture")
+                .tooltip("buddy")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
@@ -151,8 +158,6 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // ── Global hotkeys ────────────────────────────────────────────
-            // Ctrl+Shift+Space — screenshot → Claude → TTS (v0.1.0)
             app.handle().global_shortcut().on_shortcut(
                 "CmdOrCtrl+Shift+Space",
                 |app, _shortcut, event| {
@@ -162,7 +167,6 @@ pub fn run() {
                 },
             )?;
 
-            // Ctrl+Shift+R — toggle meeting audio capture (v0.2.0)
             app.handle().global_shortcut().on_shortcut(
                 "CmdOrCtrl+Shift+R",
                 |app, _shortcut, event| {
@@ -181,6 +185,7 @@ pub fn run() {
             hide_overlay,
             show_selector,
             hide_selector,
+            export_transcript,
             audio::start_capture,
             audio::stop_capture,
             audio::set_drawer_open,

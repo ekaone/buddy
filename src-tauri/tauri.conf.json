@@ -14,14 +14,16 @@
       {
         "label": "main",
         "title": "buddy",
-        "width": 420,
-        "height": 380,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "transparent": true,
-        "resizable": false,
-        "visible": false,
-        "skipTaskbar": true
+        "width": 1080,
+        "height": 720,
+        "minWidth": 860,
+        "minHeight": 620,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "transparent": false,
+        "resizable": true,
+        "visible": true,
+        "skipTaskbar": false
       }
     ],
     "security": {
