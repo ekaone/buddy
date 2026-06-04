@@ -1,5 +1,9 @@
 # buddy
 
+<p align="center">
+  <img src="https://res.cloudinary.com/ddjsyskef/image/upload/v1780574229/Github/ui5eeucvvlm7jnfx6kcc.png" alt="Alt Text" />
+</p>
+
 > A minimal desktop AI assistant — analyse anything on screen, or transcribe a live meeting in real time.
 ```
 Ctrl+Shift+Space  →  draw a region  →  Claude sees it  →  ElevenLabs speaks the answer
