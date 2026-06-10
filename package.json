@@ -1,7 +1,7 @@
 {
   "name": "buddy",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Cross-platform desktop AI assistant",
   "keywords": [
     "ai",
